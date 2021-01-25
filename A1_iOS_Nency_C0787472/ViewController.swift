@@ -37,6 +37,11 @@ class ViewController: UIViewController, CLLocationManagerDelegate {
         let longPressGesture = UILongPressGestureRecognizer(target: self, action: #selector(onLongPress))
         mapView.addGestureRecognizer(longPressGesture)
         
+        // MARK: - double tap gesture recognizer added for remove pin
+        let doubleTap = UITapGestureRecognizer(target: self, action: #selector(dropPin))
+        doubleTap.numberOfTapsRequired = 2
+        mapView.addGestureRecognizer(doubleTap)
+        
     }
     
     //MARK: - didupdatelocation method
@@ -46,8 +51,9 @@ class ViewController: UIViewController, CLLocationManagerDelegate {
         annotation.title = "Your location"
         annotation.coordinate = locations[0].coordinate
         
-        let latDelta: CLLocationDegrees = 0.05
-        let lngDelta: CLLocationDegrees = 0.05
+        //MARK: - zooming area
+        let latDelta: CLLocationDegrees = 1.3
+        let lngDelta: CLLocationDegrees = 1.3
         
         let span = MKCoordinateSpan(latitudeDelta: latDelta, longitudeDelta: lngDelta)
         let region = MKCoordinateRegion(center: annotation.coordinate, span: span)
@@ -59,8 +65,8 @@ class ViewController: UIViewController, CLLocationManagerDelegate {
     func displayAnnotation(annotation: MKPointAnnotation,
                            setRegion: Bool) {
         
-        let latDelta: CLLocationDegrees = 0.05
-        let lngDelta: CLLocationDegrees = 0.05
+        let latDelta: CLLocationDegrees = 1.3
+        let lngDelta: CLLocationDegrees = 1.3
         
         let span = MKCoordinateSpan(latitudeDelta: latDelta, longitudeDelta: lngDelta)
         let region = MKCoordinateRegion(center: annotation.coordinate, span: span)
@@ -68,7 +74,9 @@ class ViewController: UIViewController, CLLocationManagerDelegate {
         if setRegion {
             mapView.setRegion(region, animated: true)
         }
+        // added annotaion and circle overlay to detact nearby tap event
         mapView.addAnnotation(annotation)
+        mapView.addOverlay(MKCircle(center: annotation.coordinate, radius: 7000))
     }
     
     //MARK: - long press gesture recognizer for the annotation
@@ -78,9 +86,24 @@ class ViewController: UIViewController, CLLocationManagerDelegate {
             return
         }
         else if gestureRecognizer.state != UIGestureRecognizer.State.began {
-            
             let touchPoint = gestureRecognizer.location(in: mapView)
             let coordinate = mapView.convert(touchPoint, toCoordinateFrom: mapView)
+            let mappoint = MKMapPoint(coordinate)
+            
+            //MARK: - detact if tap is inside in any overlay then do nothing
+            for overlay in self.mapView.overlays {
+                if let circle = overlay as? MKCircle {
+                    
+                    let centerMP = MKMapPoint(circle.coordinate)
+                    let distance = mappoint.distance(to: centerMP)
+                    
+                    if distance <= circle.radius {
+                        //"Tap was inside this circle of already added annotation(marker)"
+                        return
+                    }
+                    continue
+                }
+            }
             
             //MARK: - 4 tap remove all annotations(Markers) and overlays
             if selectedCities.count > 2 {
@@ -107,7 +130,41 @@ class ViewController: UIViewController, CLLocationManagerDelegate {
             }
         }
     }
-    
+    //MARK: - double tap recognized, drop if it is near by marker
+    @objc func dropPin(gestureRecognizer: UIGestureRecognizer) {
+        let touchPoint = gestureRecognizer.location(in: mapView)
+        let coordinate = mapView.convert(touchPoint, toCoordinateFrom: mapView)
+        let mappoint = MKMapPoint(coordinate)
+        
+        // find overlay in which double tap happen
+        for overlay in self.mapView.overlays {
+            if let circle = overlay as? MKCircle {
+                
+                let centerMP = MKMapPoint(circle.coordinate)
+                let distance = mappoint.distance(to: centerMP)
+                
+                if distance <= circle.radius {
+                    // find annotation for which double tap happen
+                    for i in 0...selectedCities.count - 1 {
+                        if  MKMapPoint(selectedCities[i].coordinate).distance(to: centerMP) <= 600 {
+                            if selectedCities.count == 3 {
+                                mapView.removeOverlays(mapView.overlays.filter({ (mKOverlay) -> Bool in
+                                    !(mKOverlay is MKCircle)
+                                }))
+                            }
+                            mapView.removeOverlay(overlay)
+                            mapView.removeAnnotation(selectedCities[i])
+                            selectedCities.remove(at: i)
+                            return
+                        }
+                    }
+                    
+                }
+                continue
+            }
+        }
+        
+    }
     //MARK: - polyline method
     func addPolyline() {
         var coordinates = selectedCities.map {$0.coordinate}
@@ -168,7 +225,11 @@ extension ViewController: MKMapViewDelegate {
     
     //MARK: - render for overlay
     func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
-        if overlay is MKPolyline {
+        if overlay is MKCircle {
+            let rendrer = MKCircleRenderer(overlay: overlay)
+            rendrer.fillColor = UIColor.white.withAlphaComponent(0)
+            return rendrer
+        } else if overlay is MKPolyline {
             let rendrer = MKPolylineRenderer(overlay: overlay)
             rendrer.strokeColor = UIColor.green
             rendrer.lineWidth = 4
