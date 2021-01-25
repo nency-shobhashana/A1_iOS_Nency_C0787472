@@ -42,13 +42,17 @@ class ViewController: UIViewController, CLLocationManagerDelegate {
     //MARK: - didupdatelocation method
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
         
-        let userLocation = locations[0]
-        
         let annotation = MKPointAnnotation()
         annotation.title = "Your location"
-        annotation.coordinate = userLocation.coordinate
+        annotation.coordinate = locations[0].coordinate
         
-        displayAnnotation(annotation: annotation, setRegion: true)
+        let latDelta: CLLocationDegrees = 0.05
+        let lngDelta: CLLocationDegrees = 0.05
+        
+        let span = MKCoordinateSpan(latitudeDelta: latDelta, longitudeDelta: lngDelta)
+        let region = MKCoordinateRegion(center: annotation.coordinate, span: span)
+        
+        mapView.setRegion(region, animated: true)
     }
     
     //MARK: - display annotation method with enable and disable region
@@ -80,6 +84,7 @@ class ViewController: UIViewController, CLLocationManagerDelegate {
             
             //MARK: - 4 tap remove all annotations(Markers) and overlays
             if selectedCities.count > 2 {
+                btnDirection.isHidden = true
                 mapView.removeAnnotations(selectedCities)
                 mapView.removeOverlays(mapView.overlays)
                 selectedCities = []
@@ -98,6 +103,7 @@ class ViewController: UIViewController, CLLocationManagerDelegate {
             if selectedCities.count == 3 {
                 addPolygon()
                 addPolyline()
+                btnDirection.isHidden = false
             }
         }
     }
@@ -116,6 +122,45 @@ class ViewController: UIViewController, CLLocationManagerDelegate {
         let polygon = MKPolygon(coordinates: coordinates, count: coordinates.count)
         mapView.addOverlay(polygon)
     }
+    
+    @IBOutlet weak var btnDirection: UIButton!
+    //MARK: - Display routes
+    @IBAction func drawDirection(_ sender: UIButton) {
+        mapView.removeOverlays(mapView.overlays)
+        
+        var coordinates = selectedCities.map {$0.coordinate}
+        coordinates.append(selectedCities[0].coordinate)
+        
+        for index in 0...coordinates.count - 2{
+            
+            let sourcePlaceMark = MKPlacemark(coordinate: coordinates[index])
+            let destinationPlaceMark = MKPlacemark(coordinate: coordinates[index + 1])
+            
+            // request a direction
+            let directionRequest = MKDirections.Request()
+            
+            // define source and destination
+            directionRequest.source = MKMapItem(placemark: sourcePlaceMark)
+            directionRequest.destination = MKMapItem(placemark: destinationPlaceMark)
+            
+            // transportation type
+            directionRequest.transportType = .walking
+            
+            // calculate directions
+            let directions = MKDirections(request: directionRequest)
+            directions.calculate { (response, error) in
+                guard let directionResponse = response else {return}
+                // create route
+                let route = directionResponse.routes[0]
+                // draw the polyline
+                self.mapView.addOverlay(route.polyline, level: .aboveRoads)
+                
+                // defining the bounding map rect
+                let rect = route.polyline.boundingMapRect
+                self.mapView.setVisibleMapRect(rect, edgePadding: UIEdgeInsets(top: 100, left: 100, bottom: 100, right: 100), animated: true)
+            }
+        }
+    }
 }
 
 
@@ -126,7 +171,7 @@ extension ViewController: MKMapViewDelegate {
         if overlay is MKPolyline {
             let rendrer = MKPolylineRenderer(overlay: overlay)
             rendrer.strokeColor = UIColor.green
-            rendrer.lineWidth = 3
+            rendrer.lineWidth = 4
             return rendrer
         } else if overlay is MKPolygon {
             let rendrer = MKPolygonRenderer(overlay: overlay)
@@ -134,5 +179,31 @@ extension ViewController: MKMapViewDelegate {
             return rendrer
         }
         return MKOverlayRenderer()
+    }
+    
+    //MARK: - viewFor annotation method
+    func mapView(_ mapView: MKMapView, viewFor annotation: MKAnnotation) -> MKAnnotationView? {
+        
+        if annotation is MKUserLocation {
+            return nil
+        }
+        
+        let annotationView = MKMarkerAnnotationView(annotation: annotation, reuseIdentifier: "MyMarker")
+        annotationView.canShowCallout = true
+        annotationView.rightCalloutAccessoryView = UIButton(type: .detailDisclosure)
+        return annotationView
+        
+    }
+    
+    //MARK: - callout accessory control tapped
+    func mapView(_ mapView: MKMapView, annotationView view: MKAnnotationView, calloutAccessoryControlTapped control: UIControl) {
+        let loc1 = CLLocation(latitude: view.annotation?.coordinate.latitude ?? 0, longitude: view.annotation?.coordinate.longitude ?? 0)
+        let loc2 = CLLocation(latitude: mapView.userLocation.coordinate.latitude, longitude: mapView.userLocation.coordinate.longitude)
+        let position: String! = view.annotation?.title ?? ""
+        let distance = loc1.distance(from: loc2)
+        let alertController = UIAlertController(title: "Distance", message: "distance between your location and \(position ?? "") is \(String(format: "%.2f", distance)) meters.", preferredStyle: .alert)
+        let cancelAction = UIAlertAction(title: "OK", style: .cancel, handler: nil)
+        alertController.addAction(cancelAction)
+        present(alertController, animated: true, completion: nil)
     }
 }
