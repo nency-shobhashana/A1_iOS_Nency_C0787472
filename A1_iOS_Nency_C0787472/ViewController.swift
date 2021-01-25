@@ -10,73 +10,129 @@ import UIKit
 import MapKit
 
 class ViewController: UIViewController, CLLocationManagerDelegate {
-
+    
     @IBOutlet weak var mapView: MKMapView!
-            let locationManager = CLLocationManager()
+    
+    let locationManager = CLLocationManager()
+    var selectedCities:[MKAnnotation] = []
+    
     override func viewDidLoad() {
+        
         super.viewDidLoad()
-        // Do any additional setup after loading the view, typically from a nib.
         
         
-        //MARK: - show user current position
-        // assign the delegate property of the location manager to be this calss
+        mapView.delegate = self
+        
+        //MARK: - show user position
         locationManager.delegate = self
-        
-        //we define the accuracy of the location
-        locationManager.desiredAccuracy = kCLLocationAccuracyBest
-        
-        //request for the permission to acess the location
         locationManager.requestWhenInUseAuthorization()
-        
-        //start updating the location
+        locationManager.desiredAccuracy = kCLLocationAccuracyBest
+        locationManager.distanceFilter = kCLDistanceFilterNone
         locationManager.startUpdatingLocation()
+        
         mapView.showsUserLocation = true
+        mapView.isZoomEnabled = false
+        
+        // MARK: - longPress gesture recognizer added
+        let longPressGesture = UILongPressGestureRecognizer(target: self, action: #selector(onLongPress))
+        mapView.addGestureRecognizer(longPressGesture)
         
     }
     
-    
+    //MARK: - didupdatelocation method
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
         
-        //        print(locations.count)
         let userLocation = locations[0]
         
-        let latitude = userLocation.coordinate.latitude
-        let longitude = userLocation.coordinate.longitude
-        displayLocation(latitude: latitude, longitude: longitude, title: "you are here", subtitle: "")
+        let annotation = MKPointAnnotation()
+        annotation.title = "Your location"
+        annotation.coordinate = userLocation.coordinate
+        
+        displayAnnotation(annotation: annotation, setRegion: true)
     }
     
-    // MARK: - display user location
-    func displayLocation(latitude: CLLocationDegrees,
-                         longitude: CLLocationDegrees,
-                         title: String,
-                         subtitle: String) {
-        //2nd step - define span
+    //MARK: - display annotation method with enable and disable region
+    func displayAnnotation(annotation: MKPointAnnotation,
+                           setRegion: Bool) {
+        
         let latDelta: CLLocationDegrees = 0.05
         let lngDelta: CLLocationDegrees = 0.05
         
         let span = MKCoordinateSpan(latitudeDelta: latDelta, longitudeDelta: lngDelta)
+        let region = MKCoordinateRegion(center: annotation.coordinate, span: span)
         
-        // 3rd step is to define location
-        let location = CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
-        
-        //4th step to define region
-        let region = MKCoordinateRegion(center: location, span: span)
-        
-        //5th step is to det the region for the map
-        mapView.setRegion(region, animated: true)
-        
-        //6th step is to define annotation
-        let annotation = MKPointAnnotation()
-        annotation.title = title
-        annotation.subtitle = subtitle
-        annotation.coordinate = location
+        if setRegion {
+            mapView.setRegion(region, animated: true)
+        }
         mapView.addAnnotation(annotation)
-        
     }
-
+    
+    //MARK: - long press gesture recognizer for the annotation
+    @objc func onLongPress(gestureRecognizer: UIGestureRecognizer) {
+        // discontinued long press
+        if gestureRecognizer.state != UIGestureRecognizer.State.ended {
+            return
+        }
+        else if gestureRecognizer.state != UIGestureRecognizer.State.began {
+            
+            let touchPoint = gestureRecognizer.location(in: mapView)
+            let coordinate = mapView.convert(touchPoint, toCoordinateFrom: mapView)
+            
+            //MARK: - 4 tap remove all annotations(Markers) and overlays
+            if selectedCities.count > 2 {
+                mapView.removeAnnotations(selectedCities)
+                mapView.removeOverlays(mapView.overlays)
+                selectedCities = []
+            }
+            let position = selectedCities.count
+            
+            // add annotation for the coordinatet
+            let annotation = MKPointAnnotation()
+            annotation.title =  position == 0 ? "A" : position == 1 ? "B" : "C"
+            annotation.coordinate = coordinate
+            selectedCities.insert(annotation, at: position)
+            
+            displayAnnotation(annotation: annotation, setRegion: false)
+            
+            //MARK: - display line and area after 3rd tap
+            if selectedCities.count == 3 {
+                addPolygon()
+                addPolyline()
+            }
+        }
+    }
+    
+    //MARK: - polyline method
+    func addPolyline() {
+        var coordinates = selectedCities.map {$0.coordinate}
+        coordinates.append(selectedCities[0].coordinate)
+        let polyline = MKPolyline(coordinates: coordinates, count: coordinates.count)
+        mapView.addOverlay(polyline)
+    }
+    
+    //MARK: - polygon method
+    func addPolygon() {
+        let coordinates = selectedCities.map {$0.coordinate}
+        let polygon = MKPolygon(coordinates: coordinates, count: coordinates.count)
+        mapView.addOverlay(polygon)
+    }
 }
+
 
 extension ViewController: MKMapViewDelegate {
     
+    //MARK: - render for overlay
+    func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
+        if overlay is MKPolyline {
+            let rendrer = MKPolylineRenderer(overlay: overlay)
+            rendrer.strokeColor = UIColor.green
+            rendrer.lineWidth = 3
+            return rendrer
+        } else if overlay is MKPolygon {
+            let rendrer = MKPolygonRenderer(overlay: overlay)
+            rendrer.fillColor = UIColor.red.withAlphaComponent(0.5)
+            return rendrer
+        }
+        return MKOverlayRenderer()
+    }
 }
-
