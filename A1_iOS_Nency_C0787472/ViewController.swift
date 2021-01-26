@@ -51,7 +51,6 @@ class ViewController: UIViewController, CLLocationManagerDelegate {
         annotation.title = "Your location"
         annotation.coordinate = locations[0].coordinate
         
-        //MARK: - zooming area
         let latDelta: CLLocationDegrees = 1.3
         let lngDelta: CLLocationDegrees = 1.3
         
@@ -59,6 +58,7 @@ class ViewController: UIViewController, CLLocationManagerDelegate {
         let region = MKCoordinateRegion(center: annotation.coordinate, span: span)
         
         mapView.setRegion(region, animated: true)
+        
     }
     
     //MARK: - display annotation method with enable and disable region
@@ -155,6 +155,7 @@ class ViewController: UIViewController, CLLocationManagerDelegate {
                             mapView.removeOverlay(overlay)
                             mapView.removeAnnotation(selectedCities[i])
                             selectedCities.remove(at: i)
+                            changeAnnotaionTitle()
                             return
                         }
                     }
@@ -163,8 +164,15 @@ class ViewController: UIViewController, CLLocationManagerDelegate {
                 continue
             }
         }
-        
     }
+    
+    // change annotation title based on position
+    func changeAnnotaionTitle(){
+        for index in 0...selectedCities.count - 1 {
+            (selectedCities[index] as! MKPointAnnotation).title = index == 0 ? "A" : index == 1 ? "B" : "C"
+        }
+    }
+    
     //MARK: - polyline method
     func addPolyline() {
         var coordinates = selectedCities.map {$0.coordinate}
@@ -261,8 +269,8 @@ extension ViewController: MKMapViewDelegate {
         let loc1 = CLLocation(latitude: view.annotation?.coordinate.latitude ?? 0, longitude: view.annotation?.coordinate.longitude ?? 0)
         let loc2 = CLLocation(latitude: mapView.userLocation.coordinate.latitude, longitude: mapView.userLocation.coordinate.longitude)
         let position: String! = view.annotation?.title ?? ""
-        let distance = loc1.distance(from: loc2)
-        let alertController = UIAlertController(title: "Distance", message: "distance between your location and \(position ?? "") is \(String(format: "%.2f", distance)) meters.", preferredStyle: .alert)
+        let distance = loc1.distance(from: loc2) / 1000.0
+        let alertController = UIAlertController(title: "Distance", message: "distance between your location and \(position ?? "") is \(String(format: "%.2f", distance)) KMs.", preferredStyle: .alert)
         let cancelAction = UIAlertAction(title: "OK", style: .cancel, handler: nil)
         alertController.addAction(cancelAction)
         present(alertController, animated: true, completion: nil)
